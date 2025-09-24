@@ -1,128 +1,94 @@
+// PathManager.cpp
 #include "PathManager.h"
 #include "Engine/World.h"
-#include "Kismet/KismetMathLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/Character.h"
 
 APathManager::APathManager()
 {
-	PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = false;  // No need to tick every frame
 }
 
 void APathManager::BeginPlay()
 {
-	Super::BeginPlay();
+    Super::BeginPlay();
 
-	// Initialize the maze
-	InitializeMaze();
+    // Validate parameters
+    if (!BlockClass || Rows <= 0 || Cols <= 0 || CenterPlatformSize <= 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid configuration for PathManager."));
+        return;
+    }
+    if (CenterPlatformSize > Rows || CenterPlatformSize > Cols)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("CenterPlatformSize is larger than grid."));
+        return;
+    }
 
-	// Generate random maze starting from top-left
-	GenerateMaze(1, 1);
+    // Determine the start/end indices of the center platform
+    int32 CenterStartRow = (Rows - CenterPlatformSize) / 2;
+    int32 CenterEndRow = CenterStartRow + CenterPlatformSize - 1;
+    int32 CenterStartCol = (Cols - CenterPlatformSize) / 2;
+    int32 CenterEndCol = CenterStartCol + CenterPlatformSize - 1;
 
-	// Spawn BP_Block actors according to maze
-	SpawnMaze();
-}
+    FVector Origin = GetActorLocation();
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Owner = this;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-void APathManager::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}
+    // Loop over each grid cell
+    for (int32 i = 0; i < Rows; ++i)
+    {
+        for (int32 j = 0; j < Cols; ++j)
+        {
+            // Check if the cell is within the center platform region
+            bool bIsInCenter = (i >= CenterStartRow && i <= CenterEndRow
+                && j >= CenterStartCol && j <= CenterEndCol);
 
-// Initialize maze array with all walls
-void APathManager::InitializeMaze()
-{
-	MazeArray.SetNum(Rows);
-	for (int32 i = 0; i < Rows; i++)
-	{
-		MazeArray[i].SetNum(Cols);
-		for (int32 j = 0; j < Cols; j++)
-		{
-			MazeArray[i][j] = 1; // 1 = wall
-		}
-	}
-}
+            bool bSpawnBlock = bIsInCenter;
+            if (!bIsInCenter)
+            {
+                // Randomly decide to spawn a block or leave a gap
+                bSpawnBlock = (FMath::RandRange(0, 1) > 0);  // 50% chance [oai_citation:7‡dev.epicgames.com](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/Math/FMath/RandRange/1#:~:text=static%20int32%20RandRange%20,Copy%20full%20snippet)
+            }
 
-// Check if cell can be turned into a path
-bool APathManager::IsValid(int32 x, int32 y)
-{
-	if (x <= 0 || y <= 0 || x >= Cols - 1 || y >= Rows - 1)
-		return false;
+            if (bSpawnBlock)
+            {
+                // Calculate spawn location for this block
+                FVector SpawnLocation = Origin;
+                SpawnLocation.X += i * BlockSize * 2.0f;
+                SpawnLocation.Y += j * BlockSize * 2.0f;
 
-	int32 Count = 0;
-	int dx[4] = { 0, 1, 0, -1 };
-	int dy[4] = { -1, 0, 1, 0 };
+                // Spawn the block actor
+                AActor* Block = GetWorld()->SpawnActor<AActor>(
+                    BlockClass,
+                    SpawnLocation,
+                    FRotator::ZeroRotator,
+                    SpawnParams);
 
-	for (int i = 0; i < 4; i++)
-	{
-		int nx = x + dx[i];
-		int ny = y + dy[i];
-		if (MazeArray[ny][nx] == 0)
-			Count++;
-	}
+                if (Block)
+                {
+                    // Scale the block to 2x2 in XY
+                    Block->SetActorScale3D(FVector(2.0f, 2.0f, 1.0f));
+                    SpawnedBlocks.Add(Block);
+                }
+            }
+        }
+    }
 
-	return Count <= 1; // Only carve path if <=1 neighbor
-}
+    // Compute the world location of the center of the center platform
+    int32 CenterIndexRow = CenterStartRow + CenterPlatformSize / 2;
+    int32 CenterIndexCol = CenterStartCol + CenterPlatformSize / 2;
+    FVector CenterLocation = Origin;
+    CenterLocation.X += CenterIndexRow * BlockSize * 2.0f;
+    CenterLocation.Y += CenterIndexCol * BlockSize * 2.0f;
+    // Raise Z so the player spawns above the platform (safe drop)
+    CenterLocation.Z += BlockSize;
 
-// Recursive Depth-First maze generation
-void APathManager::GenerateMaze(int32 x, int32 y)
-{
-	MazeArray[y][x] = 0; // 0 = path
-
-	TArray<int32> dirs = { 0, 1, 2, 3 };
-	dirs.Sort([](const int32& A, const int32& B) { return FMath::RandBool(); }); // Shuffle directions
-
-	int dx[4] = { 0, 1, 0, -1 };
-	int dy[4] = { -1, 0, 1, 0 };
-
-	for (int32 i = 0; i < dirs.Num(); i++)
-	{
-		int nx = x + dx[dirs[i]];
-		int ny = y + dy[dirs[i]];
-
-		if (IsValid(nx, ny))
-		{
-			GenerateMaze(nx, ny);
-		}
-	}
-}
-
-// Spawn BP_Block actors for walls and scale to 2x2
-void APathManager::SpawnMaze()
-{
-	if (!BlockClass) return;
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// Destroy old blocks if any
-	for (AActor* Block : Blocks)
-	{
-		if (Block)
-			Block->Destroy();
-	}
-	Blocks.Empty();
-
-	for (int32 row = 0; row < Rows; row++)
-	{
-		for (int32 col = 0; col < Cols; col++)
-		{
-			if (MazeArray[row][col] == 1) // Spawn walls only
-			{
-				FVector SpawnLocation = GetActorLocation()
-					+ FVector(col * BlockSize * 2.f, row * BlockSize * 2.f, 0.f); // 2x2 spacing
-
-				FActorSpawnParameters SpawnParams;
-				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-				// Spawn the Blueprint actor
-				AActor* SpawnedActor = World->SpawnActor<AActor>(BlockClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-				if (SpawnedActor)
-				{
-					// Scale block to 2x2
-					SpawnedActor->SetActorScale3D(FVector(2.f, 2.f, 1.f));
-
-					// Store reference in Blocks array
-					Blocks.Add(SpawnedActor);
-				}
-			}
-		}
-	}
+    // Teleport the player character to the center platform
+    ACharacter* PlayerChar = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
+    if (PlayerChar)
+    {
+        PlayerChar->SetActorLocation(CenterLocation);
+    }
 }

@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -7,39 +8,35 @@
 UCLASS()
 class SHAPSHIFTINGBLOCKS_API APathManager : public AActor
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	APathManager();
+    APathManager();
 
 protected:
-	virtual void BeginPlay() override;
+    virtual void BeginPlay() override;
 
 public:
-	virtual void Tick(float DeltaTime) override;
+    // Grid dimensions (must accommodate the center platform)
+    UPROPERTY(EditAnywhere, Category = "Maze")
+    int32 Rows = 10;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
-	int32 Rows = 10;
+    UPROPERTY(EditAnywhere, Category = "Maze")
+    int32 Cols = 10;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
-	int32 Cols = 10;
+    // Base block size (used for spacing; actual block is scaled 2×2)
+    UPROPERTY(EditAnywhere, Category = "Maze")
+    float BlockSize = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
-	float BlockSize = 100.f;
+    // Width of the center platform (e.g. 5 for a 5×5 center block)
+    UPROPERTY(EditAnywhere, Category = "Maze")
+    int32 CenterPlatformSize = 5;
 
-	// Blueprint class reference (works with BP_Block)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
-	TSubclassOf<AActor> BlockClass;
+    // Blueprint class to use for each block (BP_Block)
+    UPROPERTY(EditAnywhere, Category = "Maze")
+    TSubclassOf<AActor> BlockClass;
 
-	// Store spawned blocks as generic AActor references
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Maze")
-	TArray<AActor*> Blocks;
-
-private:
-	TArray<TArray<int32>> MazeArray;
-
-	void InitializeMaze();
-	void GenerateMaze(int32 x, int32 y);
-	bool IsValid(int32 x, int32 y);
-	void SpawnMaze();
+    // Holds references to all spawned block actors
+    UPROPERTY(VisibleAnywhere, Category = "Maze")
+    TArray<AActor*> SpawnedBlocks;
 };
