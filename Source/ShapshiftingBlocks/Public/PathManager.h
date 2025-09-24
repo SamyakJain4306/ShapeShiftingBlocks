@@ -1,42 +1,69 @@
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "PathManager.generated.h"
 
+// Struct to track block and its grid position
+USTRUCT(BlueprintType)
+struct FMazeBlock
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	AActor* BlockActor = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	int32 Row = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	int32 Col = 0;
+};
+
 UCLASS()
 class SHAPSHIFTINGBLOCKS_API APathManager : public AActor
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    APathManager();
+	APathManager();
 
 protected:
-    virtual void BeginPlay() override;
+	virtual void BeginPlay() override;
 
 public:
-    // Grid dimensions (must accommodate the center platform)
-    UPROPERTY(EditAnywhere, Category = "Maze")
-    int32 Rows = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
+	int32 Rows = 15;
 
-    UPROPERTY(EditAnywhere, Category = "Maze")
-    int32 Cols = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
+	int32 Cols = 15;
 
-    // Base block size (used for spacing; actual block is scaled 2×2)
-    UPROPERTY(EditAnywhere, Category = "Maze")
-    float BlockSize = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
+	float BlockSize = 100.f;
 
-    // Width of the center platform (e.g. 5 for a 5×5 center block)
-    UPROPERTY(EditAnywhere, Category = "Maze")
-    int32 CenterPlatformSize = 5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
+	int32 CenterPlatformSize = 5;
 
-    // Blueprint class to use for each block (BP_Block)
-    UPROPERTY(EditAnywhere, Category = "Maze")
-    TSubclassOf<AActor> BlockClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Maze")
+	TSubclassOf<AActor> BlockClass;
 
-    // Holds references to all spawned block actors
-    UPROPERTY(VisibleAnywhere, Category = "Maze")
-    TArray<AActor*> SpawnedBlocks;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Maze")
+	TArray<FMazeBlock> MazeBlocks;
+
+	// Spawn maze initially
+	void SpawnMaze();
+
+	// Called when player steps on a block
+	UFUNCTION(BlueprintCallable)
+	void UpdateMazeNear(int32 PlayerRow, int32 PlayerCol);
+
+	// Randomize block types in clusters
+	void RandomizeBlockTypes();
+
+private:
+	// Helper to call Blueprint function and set enum type
+	void SetBlockTypeOnBlock(AActor* BlockActor, uint8 EnumValue);
+
+	// Spawn player at center platform
+	void SpawnPlayerAtCenter();
 };
